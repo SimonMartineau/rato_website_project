@@ -176,43 +176,65 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // If all inputs are valid, insert into the database
     if ($is_valid) {
         // Insert volunteer data into Memebrs table
-        $sql_Members = "INSERT INTO Members (first_name, last_name, gender, date_of_birth, address, zip_code, telephone_number, email, assigned_area, registration_supervisor, notes, registration_date) 
-                        VALUES ('$first_name', '$last_name', '$gender', '$date_of_birth', '$address', '$zipcode', '$telephone_number', '$email', '$assigned_area', '$registration_supervisor', '$notes', '$registration_date')";
-        
-        if ($conn->query($sql_Members) === TRUE) {
+        $stmt = $conn->prepare("INSERT INTO Members (first_name, last_name, gender, date_of_birth, address, zip_code, telephone_number, email, assigned_area, registration_supervisor, notes, registration_date) 
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+        // Bind the parameters to the prepared statement
+        $stmt->bind_param("ssssssssssss", $first_name, $last_name, $gender, $date_of_birth, $address, $zipcode, $telephone_number, $email, $assigned_area, $registration_supervisor, $notes, $registration_date);
+
+        // Execute the prepared statement
+        if ($stmt->execute()) {
             // Retrieve the ID of the inserted member
             $member_id = $conn->insert_id;
-
-            // Insert availability into Member_Availability
-            foreach ($volunteer_availability as $availability){
-                list($weekday, $time_period) = explode('-', $availability);
-                $sql_Member_Availability = "INSERT INTO Member_Availability (member_id, weekday, time_period) 
-                                            VALUES ('$member_id', '$weekday', '$time_period')";
-                                     
-                if (!$conn->query($sql_Member_Availability)) {
-                    echo "Error inserting availability: " . $conn->error;
-                }
-            }
-            
-            // Insert interests into Member_Interests table
-            foreach ($volunteer_interests as $interest) {
-                $sql_Member_Interests = "INSERT INTO Member_Interests (member_id, interest) 
-                                     VALUES ('$member_id', '$interest')";
-                if (!$conn->query($sql_Member_Interests)) {
-                    echo "Error inserting interest: " . $conn->error;
-                }
-            }
-
-            // The data was successfully sent
-            $insert_success = true;
-
-            // If the data was sent correctly, reset the form
-            $first_name = $last_name = $gender = $date_of_birth = $address = $zipcode = $telephone_number = $email = $registration_date = $assigned_area = $other_interest = $registration_supervisor = $notes = "";
-            $volunteer_availability = [];
-            $volunteer_interests = [];
         } else {
-            echo "Error: " . $sql . "<br>" . $conn->error;
+            echo "Error inserting member: " . $stmt->error;
+            $stmt->close();
+            return; // Stop all further execution if the insert fails
         }
+        // Close the statement
+        $stmt->close();
+
+        // Insert availability into Member_Availability
+        foreach ($volunteer_availability as $availability){
+            list($weekday, $time_period) = explode('-', $availability);
+            // Prepare the query with placeholders for the user inputs
+            $stmt = $conn->prepare("INSERT INTO Member_Availability (member_id, weekday, time_period) 
+                                    VALUES (?, ?, ?)");
+
+            // Bind the parameters to the prepared statement
+            $stmt->bind_param("iss", $member_id, $weekday, $time_period);
+
+            // Execute the prepared statement
+            if ($stmt->execute()) {
+                // Successful insertion
+            } else {
+                echo "Error: " . $stmt->error;
+                $stmt->close();
+                return; // Stop all further execution if the insert fails
+            }
+
+            // Close the statement
+            $stmt->close();
+        }
+        
+        // Insert interests into Member_Interests table
+        foreach ($volunteer_interests as $interest) {
+            $stmt = $conn->prepare("INSERT INTO Member_Interests (member_id, interest) VALUES (?, ?)");
+            $stmt->bind_param("is", $member_id, $interest);
+    
+            if (!$stmt->execute()) {
+                echo "Error inserting interest: " . $stmt->error;
+                $stmt->close();
+                return; // Stop all further execution if the insert fails
+            }
+            $stmt->close();
+        }
+
+        // If the data was sent correctly, reset the form
+        $insert_success = true;
+        $first_name = $last_name = $gender = $date_of_birth = $address = $zipcode = $telephone_number = $email = $registration_date = $assigned_area = $other_interest = $registration_supervisor = $notes = "";
+        $volunteer_availability = [];
+        $volunteer_interests = [];
     }
 }
 
